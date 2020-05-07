@@ -12,7 +12,7 @@ from pyqtgraph.Qt import QtCore, QtGui
 
 class Visualizer(object):
     def __init__(self, data, fs):
-        self.traces = dict()
+        
         self.app = QtGui.QApplication(sys.argv)
         self.w = gl.GLViewWidget()
         self.w.opts['distance'] = 40
@@ -59,8 +59,8 @@ class Visualizer(object):
         tmp = np.fft.rfft(self.data[self.start:self.stop]*signal.get_window('blackmanharris', self.window))
         tmp = 20*np.log10(np.abs(tmp)*2 / np.sum(signal.get_window('blackmanharris', self.window)))
         
-        self.fft = np.roll(self.fft, -1)
-        self.fft[:, -1] = tmp
+        self.fft = np.roll(self.fft, 1)
+        self.fft[:, 1] = tmp
         self.colors = self.cmap((self.fft+200)/(0+200))
 
         self.start += self.window #// 2
@@ -71,7 +71,7 @@ class Visualizer(object):
 
         self.surface.setData(self.f, self.t, self.fft, colors=self.colors)
 
-        print(self.w.cameraPosition())
+        # print(self.w.cameraPosition())
 
 
     def animation(self):
@@ -91,11 +91,14 @@ if __name__ == '__main__':
     data_stereo, fs = sf.read(input_file)
     data = np.array(data_stereo[:,1]) # only one channel for now
 
-    data_stereo *= 32767 / np.max(np.abs(data_stereo))
-    data_stereo = data_stereo.astype(np.int16)
 
     pg.setConfigOptions(useOpenGL=True, antialias=True)
     v = Visualizer(data, fs)
+
+    # data_stereo = np.concatenate((np.zeros((v.window, 2)), data_stereo))
+    data_stereo *= 32767 / np.max(np.abs(data_stereo))
+    data_stereo = data_stereo.astype(np.int16)
+
     sa.play_buffer(data_stereo, 2, 2, fs)
     v.animation()
 
