@@ -1,6 +1,6 @@
 import sys
 import time
-import simpleaudio as sa
+import sounddevice as sd
 import matplotlib.pyplot as plt
 import numpy as np
 import pyqtgraph as pg
@@ -16,7 +16,7 @@ class Visualizer(object):
         # setup window and camera
         self.app = QtGui.QApplication(sys.argv)
         self.w = gl.GLViewWidget()
-        self.w.opts['distance'] = 40
+        # self.w.opts['distance'] = 40
         self.w.setWindowTitle('test')
         self.w.setGeometry(0, 30, 1280, 720)
 
@@ -32,11 +32,11 @@ class Visualizer(object):
         self.window = fs // self.animation_fps
 
         # make frame big so we can see some history
-        self.frame = 128*self.window
+        self.frame = 1024*self.window
         self.chunks = self.frame*2 // self.window
         self.nframes = len(self.data)//self.window  # wrong?
 
-        self.fft = -200*np.ones((self.window//2 + 1, self.chunks))
+        self.fft = -50*np.ones((self.window//2 + 1, self.chunks))
         self.f = np.linspace(0, self.fs//2, self.window//2+1)
         self.t = np.linspace(0, self.fs/self.frame, self.chunks)
 
@@ -45,7 +45,7 @@ class Visualizer(object):
 
         self.cmap = plt.get_cmap('inferno')
         # zvalues - min / (max - min)
-        self.colors = self.cmap((self.fft+200)/(0+200))
+        self.colors = self.cmap((self.fft+50)/(0+50))
 
         self.surface = gl.GLSurfacePlotItem(
             self.f, self.t, self.fft, colors=self.colors, computeNormals=False)
@@ -77,7 +77,7 @@ class Visualizer(object):
         if self.stop > len(self.data):
             quit()
 
-        self.colors = self.cmap((self.fft+200)/(0+200))
+        self.colors = self.cmap((self.fft+50)/(0+50))
         self.surface.setData(self.f, self.t, self.fft, colors=self.colors)
 
         # print(self.w.cameraPosition())
@@ -93,8 +93,9 @@ class Visualizer(object):
 if __name__ == '__main__':
 
     input_file = "D:/git/Misc/07 Mind's Mirrors.wav"
-    input_file = "D:/git/Misc/07 Break Those Bones Whose Sinews Gave It Motion.wav"
-    input_file = "./test.wav"
+    # input_file = "D:/git/Misc/07 Break Those Bones Whose Sinews Gave It Motion.wav"
+    # input_file = "./test.wav"
+    # input_file = "./01 6_00.wav"
 
     data_stereo, fs = sf.read(input_file)
     # only one channel for now, downmix @TODO
@@ -106,6 +107,7 @@ if __name__ == '__main__':
     # data_stereo = np.concatenate((np.zeros((v.window, 2)), data_stereo)) # shitty delay compensation
     data_stereo *= 32767 / np.max(np.abs(data_stereo))
     data_stereo = data_stereo.astype(np.int16)
+    
 
-    sa.play_buffer(data_stereo, 2, 2, fs)
+    sd.play(data_stereo, fs)
     v.animation()
