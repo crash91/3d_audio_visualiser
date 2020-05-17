@@ -1,4 +1,4 @@
 # TODOs
-change to use a rolling FFT instead of computing the FFT each update
+implement a callback based system with audio chunks, sync a/v
 
-change to use pyqtgraph with opengl instead of matplotlib
+implement audio controls

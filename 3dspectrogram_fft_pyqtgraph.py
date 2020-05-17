@@ -32,7 +32,7 @@ class Visualizer(object):
         self.window = fs // self.animation_fps
 
         # make frame big so we can see some history
-        self.frame = 1024*self.window
+        self.frame = 256*self.window
         self.chunks = self.frame*2 // self.window
         self.nframes = len(self.data)//self.window  # wrong?
 
@@ -107,7 +107,6 @@ if __name__ == '__main__':
     # data_stereo = np.concatenate((np.zeros((v.window, 2)), data_stereo)) # shitty delay compensation
     data_stereo *= 32767 / np.max(np.abs(data_stereo))
     data_stereo = data_stereo.astype(np.int16)
-    
 
     sd.play(data_stereo, fs)
     v.animation()
