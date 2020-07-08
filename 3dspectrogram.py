@@ -1,77 +1,112 @@
+import sys
+import time
+import sounddevice as sd
 import matplotlib.pyplot as plt
 import numpy as np
+import pyqtgraph as pg
+import pyqtgraph.opengl as gl
 import scipy.signal as signal
 import soundfile as sf
-from matplotlib.animation import FuncAnimation
-from mpl_toolkits.mplot3d import Axes3D
+from pyqtgraph.Qt import QtCore, QtGui
 
 
-input_file = "./test.wav"
+class Visualizer(object):
+    def __init__(self, data, fs):
 
-data, fs = sf.read(input_file)
-data = data[:,1] # only one channel for now
+        # setup window and camera
+        self.app = QtGui.QApplication(sys.argv)
+        self.w = gl.GLViewWidget()
+        # self.w.opts['distance'] = 40
+        self.w.setWindowTitle('test')
+        self.w.setGeometry(0, 30, 1280, 720)
 
-animation_fps = 30
+        self.w.pan(10, 500, 100)
+        self.w.setCameraPosition(distance=20000, elevation=30, azimuth=-135)
+        self.w.show()
 
-start = 0
-stop = 4096
-frame = 4096
-window = 256
-hop = int(fs/animation_fps)
+        self.data = data
+        self.fs = fs
 
-nframes = len(data) - frame // hop
+        # set window relative to fps so we grab the appropriate number of samples
+        self.animation_fps = 60
+        self.window = fs // self.animation_fps
 
-# f, t, stft = signal.stft(data, fs, signal.get_window('blackmanharris', window), nperseg=window)
-# stft = abs(stft)
-# stft = 20*np.log10(stft * 2 / np.sum(signal.get_window('blackmanharris', window)))
-# stft = np.clip(stft, -200, 0)
-# stft[stft==-200] = np.nan
+        # make frame big so we can see some history
+        self.frame = 256*self.window
+        self.chunks = self.frame*2 // self.window
+        self.nframes = len(self.data)//self.window  # wrong?
 
-fig = plt.figure(figsize=(8,8), facecolor='black', frameon=False)
-ax = fig.gca(projection='3d')
+        self.fft = -50*np.ones((self.window//2 + 1, self.chunks))
+        self.f = np.linspace(0, self.fs//2, self.window//2+1)
+        self.t = np.linspace(0, self.fs/self.frame, self.chunks)
 
-def set_plot_params(fig, ax):
-    ax.set_autoscale_on(False)
-    ax.view_init(azim=-70, elev=30)
-    ax.set_xlim([0, fs/2])
-    # ax.set_xlim([3000, 22000])
-    ax.set_ylim([0.03, 0.08])
+        self.start = 0
+        self.stop = self.window
 
-    plt.margins(0)
-    ax.set_facecolor('black')
-    ax.w_xaxis.set_pane_color((0,0,0,0))
-    ax.w_yaxis.set_pane_color((0,0,0,0))
-    ax.w_zaxis.set_pane_color((0,0,0,0))
+        self.cmap = plt.get_cmap('inferno')
+        # zvalues - min / (max - min)
+        self.colors = self.cmap((self.fft+50)/(0+50))
 
-    fig.subplots_adjust(left=0, bottom=0, right=1, top=1, wspace=None, hspace=None)
-    ax.grid(False)
-    ax.axis('off')
-    ax.set_frame_on(False)
-    plt.xticks([])
-    plt.yticks([])
-    plt.tight_layout()
+        self.surface = gl.GLSurfacePlotItem(
+            self.f, self.t, self.fft, colors=self.colors, computeNormals=False)
+        # scale so we have a square
+        self.surface.scale(1, np.max(self.f)/np.max(self.t), 100)
 
-def update_plot(i):
-    global start, stop, window, hop
-    ax.clear()
+        self.w.addItem(self.surface)
 
-    f, t, stft = signal.stft(data[start:stop], fs, signal.get_window('blackmanharris', window), nperseg=window)
-    stft = abs(stft)
-    stft = 20*np.log10(stft * 2 / np.sum(signal.get_window('blackmanharris', window)))
-    stft = np.clip(stft, -200, 0)
-    stft[stft==-200] = np.nan
+    def run(self):
+        if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
+            QtGui.QApplication.instance().exec_()
 
-    # remove edges because they look ugly --> stft[1:-1]
-    surf = ax.plot_surface(f[:, None], t[None, 1:-1], stft[:, 1:-1], cmap=plt.cm.inferno)#, antialiased=False)
+    def update(self):
+        # stime = time.time()
 
-    set_plot_params(fig, ax)
+        # get fft of new chunk
+        tmp = np.fft.rfft(self.data[self.start:self.stop]
+                          * signal.get_window('blackmanharris', self.window))
+        tmp = 20*np.log10(np.abs(tmp)*2 /
+                          np.sum(signal.get_window('blackmanharris', self.window)))
 
-    start += hop
-    stop = start + frame
-    if stop > len(data):
-        quit()
-    
-    return surf
+        # roll array
+        self.fft = np.roll(self.fft, 1)
+        self.fft[:, 1] = tmp
 
-anim = FuncAnimation(fig, update_plot, frames=nframes)
-anim.save('out.mp4', fps=animation_fps, writer='ffmpeg', progress_callback=lambda i, n: print(f'Saving frame {i} of {n}'))
+        self.start += self.window  # // 2
+        self.stop += self.window  # // 2
+
+        if self.stop > len(self.data):
+            quit()
+
+        self.colors = self.cmap((self.fft+50)/(0+50))
+        self.surface.setData(self.f, self.t, self.fft, colors=self.colors)
+
+        # print(self.w.cameraPosition())
+
+    def animation(self):
+        timer = QtCore.QTimer()
+        timer.timeout.connect(self.update)
+        timer.start(1000/self.animation_fps)
+        self.run()
+
+
+# Start event loop.
+if __name__ == '__main__':
+
+    # input_file = "D:/git/Misc/07 Mind's Mirrors.wav"
+    # input_file = "D:/git/Misc/07 Break Those Bones Whose Sinews Gave It Motion.wav"
+    # input_file = "./test.wav"
+    input_file = "./01 6_00.wav"
+
+    data_stereo, fs = sf.read(input_file)
+    # only one channel for now, downmix @TODO
+    data = np.array(data_stereo[:, 1])
+
+    pg.setConfigOptions(useOpenGL=True, antialias=False)  # turn of aa if laggy
+    v = Visualizer(data, fs)
+
+    # data_stereo = np.concatenate((np.zeros((v.window, 2)), data_stereo)) # shitty delay compensation
+    data_stereo *= 32767 / np.max(np.abs(data_stereo))
+    data_stereo = data_stereo.astype(np.int16)
+
+    sd.play(data_stereo, fs)
+    v.animation()
